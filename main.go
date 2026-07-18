@@ -83,7 +83,7 @@ func main() {
 
 func printUsage() {
 	fmt.Println("Usage:")
-	fmt.Println("  cluade-ctx current")
+	fmt.Println("  cluade-ctx current \n\t --show: if exists, print the current config")
 	fmt.Println("  cluade-ctx switch <name>")
 	fmt.Println("  cluade-ctx accounts")
 	fmt.Println("  cluade-ctx add-account <name> [KEY=VALUE ...]")
@@ -177,8 +177,13 @@ func runRemoveAccount(baseDir string, args []string) error {
 }
 
 func runCurrent(baseDir string, args []string) error {
-	if len(args) != 0 {
-		return fmt.Errorf("usage: cluade-ctx current")
+	show := false
+	for _, arg := range args {
+		if arg == "--show" {
+			show = true
+		} else {
+			return fmt.Errorf("unknown flag: %s", arg)
+		}
 	}
 
 	if config.CurrentAccount == "" {
@@ -189,6 +194,22 @@ func runCurrent(baseDir string, args []string) error {
 	account, ok := config.findAccount(config.CurrentAccount)
 	if !ok {
 		return fmt.Errorf("current account %q not found", config.CurrentAccount)
+	}
+
+	if show {
+		fmt.Printf("Name: %s\n", account.Name)
+		fmt.Println("Environment:")
+		if len(account.Env) > 0 {
+			keys := make([]string, 0, len(account.Env))
+			for key := range account.Env {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			for _, key := range keys {
+				fmt.Printf("  %s=%s\n", key, account.Env[key])
+			}
+		}
+		return nil
 	}
 
 	fmt.Println(account.Name)
