@@ -1,4 +1,4 @@
-module github.com/tahmooress/cluade-ctx
+module github.com/tahmooress/claude-ctx
 
 go 1.26.5
 
