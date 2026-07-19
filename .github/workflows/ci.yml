@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify vendor consistency
+        run: go mod verify
+
+      - name: Build
+        run: go build -mod=vendor ./...
+
+      - name: Vet
+        run: go vet -mod=vendor ./...
+
+      - name: Test
+        run: go test -mod=vendor -v ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          go-version-file: go.mod
+          version: latest
+        continue-on-error: true
