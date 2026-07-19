@@ -120,7 +120,7 @@ current-account: default
 		t.Fatalf("write settings snapshot: %v", err)
 	}
 
-	if err := runSwitch(configDir, []string{"work"}); err != nil {
+	if err := runSwitch(configDir, "work"); err != nil {
 		t.Fatalf("runSwitch() error = %v", err)
 	}
 

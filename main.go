@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	arg "github.com/alexflint/go-arg"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -41,53 +42,68 @@ type Config struct {
 
 var errNoLocalSettings = errors.New("no local settings available")
 
+type currentCmd struct {
+	Show bool `arg:"--show" help:"if exists, print the current config"`
+}
+
+type switchCmd struct {
+	Name string `arg:"positional,required" help:"account name to switch to"`
+}
+
+type accountsCmd struct{}
+
+type addAccountCmd struct {
+	Name string   `arg:"positional,required" help:"account name"`
+	Env  []string `arg:"positional" help:"KEY=VALUE environment entries"`
+}
+
+type removeCmd struct {
+	Name string `arg:"positional,required" help:"account name to remove"`
+}
+
+type cliArgs struct {
+	Current    *currentCmd    `arg:"subcommand:current" help:"show current account"`
+	Switch     *switchCmd     `arg:"subcommand:switch" help:"switch to a different account"`
+	Accounts   *accountsCmd   `arg:"subcommand:accounts" help:"interactive account selector"`
+	AddAccount *addAccountCmd `arg:"subcommand:add-account" help:"add a new account"`
+	Remove     *removeCmd     `arg:"subcommand:remove" help:"remove an account"`
+}
+
 func main() {
-	if len(os.Args) < 2 {
-		printUsage()
-		os.Exit(2)
-	}
+	var args cliArgs
+	p := arg.MustParse(&args)
 
 	baseDir := localBaseDir()
 
-	switch os.Args[1] {
-	case "current":
-		if err := runCurrent(baseDir, os.Args[2:]); err != nil {
+	switch {
+	case args.Current != nil:
+		if err := runCurrent(baseDir, args.Current.Show); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-	case "switch":
-		if err := runSwitch(baseDir, os.Args[2:]); err != nil {
+	case args.Switch != nil:
+		if err := runSwitch(baseDir, args.Switch.Name); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-	case "accounts":
-		if err := runAccounts(baseDir, os.Args[2:]); err != nil {
+	case args.Accounts != nil:
+		if err := runAccounts(baseDir); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-	case "add-account":
-		if err := runAddAccount(baseDir, os.Args[2:]); err != nil {
+	case args.AddAccount != nil:
+		if err := runAddAccount(baseDir, args.AddAccount.Name, args.AddAccount.Env); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-	case "remove":
-		if err := runRemoveAccount(baseDir, os.Args[2:]); err != nil {
+	case args.Remove != nil:
+		if err := runRemoveAccount(baseDir, args.Remove.Name); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
 	default:
-		printUsage()
-		os.Exit(2)
+		p.Fail("missing subcommand")
 	}
-}
-
-func printUsage() {
-	fmt.Println("Usage:")
-	fmt.Println("  cluade-ctx current \n\t --show: if exists, print the current config")
-	fmt.Println("  cluade-ctx switch <name>")
-	fmt.Println("  cluade-ctx accounts")
-	fmt.Println("  cluade-ctx add-account <name> [KEY=VALUE ...]")
-	fmt.Println("  cluade-ctx remove <name>")
 }
 
 func localBaseDir() string {
@@ -109,15 +125,9 @@ func homeSettingsPath() (string, error) {
 	return filepath.Join(home, ".claude", "settings.json"), nil
 }
 
-func runAddAccount(baseDir string, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: cluade-ctx add-account <name> [KEY=VALUE ...]")
-	}
-
-	name := args[0]
-
+func runAddAccount(baseDir string, name string, rawEnv []string) error {
 	env := make(map[string]string)
-	for _, entry := range args[1:] {
+	for _, entry := range rawEnv {
 		parts := strings.SplitN(entry, "=", 2)
 		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
 			return fmt.Errorf("invalid env entry %q (expected KEY=VALUE)", entry)
@@ -141,14 +151,7 @@ func runAddAccount(baseDir string, args []string) error {
 	return nil
 }
 
-func runRemoveAccount(baseDir string, args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: cluade-ctx remove <name>")
-	}
-
-	name := args[0]
-
-	// Check if account exists
+func runRemoveAccount(baseDir string, name string) error {
 	foundIndex := -1
 	for i, account := range config.Accounts {
 		if account.Name == name {
@@ -160,12 +163,10 @@ func runRemoveAccount(baseDir string, args []string) error {
 		return fmt.Errorf("account %q does not exist", name)
 	}
 
-	// Check if account is currently in use
 	if config.CurrentAccount == name {
 		return fmt.Errorf("account %q is currently in use and cannot be deleted", name)
 	}
 
-	// Remove the account
 	config.Accounts = append(config.Accounts[:foundIndex], config.Accounts[foundIndex+1:]...)
 
 	if err := saveConfig(baseDir, config); err != nil {
@@ -176,16 +177,7 @@ func runRemoveAccount(baseDir string, args []string) error {
 	return nil
 }
 
-func runCurrent(baseDir string, args []string) error {
-	show := false
-	for _, arg := range args {
-		if arg == "--show" {
-			show = true
-		} else {
-			return fmt.Errorf("unknown flag: %s", arg)
-		}
-	}
-
+func runCurrent(baseDir string, show bool) error {
 	if config.CurrentAccount == "" {
 		fmt.Println("No current account configured")
 		return nil
@@ -216,14 +208,10 @@ func runCurrent(baseDir string, args []string) error {
 	return nil
 }
 
-func runSwitch(baseDir string, args []string) error {
-	if len(args) != 1 {
-		return fmt.Errorf("usage: cluade-ctx switch <name>")
-	}
-
-	account, ok := config.findAccount(args[0])
+func runSwitch(baseDir string, name string) error {
+	account, ok := config.findAccount(name)
 	if !ok {
-		return fmt.Errorf("account %q not found", args[0])
+		return fmt.Errorf("account %q not found", name)
 	}
 
 	config.CurrentAccount = account.Name
@@ -544,11 +532,7 @@ func updateSettingsSnapshot(baseDir string, env map[string]string) error {
 	return os.WriteFile(settingsPath, content, 0o644)
 }
 
-func runAccounts(baseDir string, args []string) error {
-	if len(args) != 0 {
-		return fmt.Errorf("usage: cluade-ctx accounts")
-	}
-
+func runAccounts(baseDir string) error {
 	selected := 0
 	for i, account := range config.Accounts {
 		if account.Name == config.CurrentAccount {
@@ -565,7 +549,7 @@ func runAccounts(baseDir string, args []string) error {
 	}
 
 	if result, ok := final.(accountsModel); ok && result.chosen != "" {
-		return runSwitch(baseDir, []string{result.chosen})
+		return runSwitch(baseDir, result.chosen)
 	}
 	return nil
 }
