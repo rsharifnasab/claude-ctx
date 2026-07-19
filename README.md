@@ -15,15 +15,25 @@ A command-line utility for managing multiple login accounts/contexts for Claude 
 
 ## Installation
 
-```bash
-# Build from source
-go build -o bin/cluade-ctx main.go
+### Quick Install (requires Go)
 
-# Or install globally
-go install
+If you have Go installed (1.26+), install directly from GitHub:
+
+```bash
+go install github.com/tahmooress/claude-ctx@latest
 ```
 
-Make sure the binary is in your PATH.
+This downloads, builds, and installs the `cluade-ctx` binary to your `$GOPATH/bin` (or `$HOME/go/bin` by default). Make sure that directory is in your `PATH`.
+
+### Build from Source
+
+```bash
+git clone https://github.com/tahmooress/claude-ctx.git
+cd claude-ctx
+go build -o bin/cluade-ctx main.go
+```
+
+Then move `bin/cluade-ctx` to a directory in your `PATH`.
 
 ## Usage
 

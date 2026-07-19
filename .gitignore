@@ -5,3 +5,6 @@ bin
 
 config.yaml
 settings.json
+
+/claude-ctx
+/vendor
